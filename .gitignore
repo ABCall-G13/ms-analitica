@@ -8,3 +8,7 @@ dist/
 htmlcov/
 .tox/
 docs/_build/
+.env
+service-account.json
+venv/
+__pycache__/
