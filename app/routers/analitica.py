@@ -58,4 +58,3 @@ async def search(query_request: QueryRequest):
             raise HTTPException(status_code=404, detail="No results found.")
     else:
         raise HTTPException(status_code=response.status_code, detail=response.text)
-
