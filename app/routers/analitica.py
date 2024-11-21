@@ -17,13 +17,14 @@ SERVICE_ACCOUNT_FILE = "service-account.json"
 @search_router.post("/search-issues")
 async def search(query_request: QueryRequest):
     try:
-        if os.getenv("ENV") == "local":
+        if os.getenv("ENV") == "production":
+            credentials, project_id = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        else:
             credentials = service_account.Credentials.from_service_account_file(
                 SERVICE_ACCOUNT_FILE,
                 scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
-        else:
-            credentials, project_id = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+            
         
         credentials.refresh(Request())
         access_token = credentials.token
