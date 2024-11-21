@@ -5,17 +5,26 @@ import json
 from google.auth import default
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
+import os
 
 search_router = APIRouter()
 
 class QueryRequest(BaseModel):
     query: str
 
+SERVICE_ACCOUNT_FILE = "service-account.json"
+
 @search_router.post("/search-issues")
 async def search(query_request: QueryRequest):
     try:
-        # Use default credentials; Google will pick up GOOGLE_APPLICATION_CREDENTIALS if set
-        credentials, project_id = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        if os.getenv("ENV") == "local":
+            credentials = service_account.Credentials.from_service_account_file(
+                SERVICE_ACCOUNT_FILE,
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+        else:
+            credentials, project_id = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        
         credentials.refresh(Request())
         access_token = credentials.token
     except Exception as e:
