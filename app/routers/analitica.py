@@ -4,14 +4,18 @@ import requests
 import json
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
+from google.auth import default
 import os
 
 search_router = APIRouter()
 
+# Modelo de datos para las solicitudes
 class QueryRequest(BaseModel):
     query: str
 
 SERVICE_ACCOUNT_FILE = "service-account.json"
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 
 @search_router.post("/search-issues")
 async def search(query_request: QueryRequest):
@@ -64,52 +68,33 @@ async def search(query_request: QueryRequest):
     else:
         raise HTTPException(status_code=response.status_code, detail=response.text)
 
-
 @search_router.post("/generate-response")
-async def generate_response(query_request: QueryRequest):
-    """Genera una respuesta usando Vertex AI Generative Models."""
-    try:
-        # Configurar credenciales
-        if os.getenv("ENV") == "production":
-            credentials, project_id = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
-        else:
-            credentials = service_account.Credentials.from_service_account_file(
-                SERVICE_ACCOUNT_FILE,
-                scopes=["https://www.googleapis.com/auth/cloud-platform"]
-            )
-        
-        credentials.refresh(Request())
-        access_token = credentials.token
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to obtain access token: {e}")
-
-    # Configurar el endpoint de Vertex AI
-    VERTEX_API_URL = "https://us-central1-aiplatform.googleapis.com/v1/projects/345518488840/locations/us-central1/publishers/google/models/text-bison@001:predict"
-
+async def chat_with_gpt(query_request: QueryRequest):
+    """Consulta la API de ChatGPT para obtener una respuesta generada por IA."""
     headers = {
-        "Authorization": f"Bearer {access_token}",
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json"
     }
 
-    payload = {
-        "instances": [
-            {
-                "content": query_request.query
-            }
+    # Cuerpo de la solicitud
+    data = {
+        "model": "gpt-4",  # Cambia a "gpt-3.5-turbo" si prefieres ese modelo
+        "messages": [
+            {"role": "system", "content": "Eres un asistente útil que ayuda a los usuarios a resolver problemas técnicos basado en problemas comunes existentes."},
+            {"role": "user", "content": query_request.query}
         ],
-        "parameters": {
-            "temperature": 0.7,
-            "maxOutputTokens": 256,
-            "topP": 0.8,
-            "topK": 40
-        }
+        "temperature": 0.7,
+        "max_tokens": 256,
+        "top_p": 1,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
     }
 
-    # Realizar la solicitud a Vertex AI
-    response = requests.post(VERTEX_API_URL, headers=headers, json=payload)
-
-    if response.status_code == 200:
-        result = response.json()["predictions"]
-        return {"response": result[0]["content"]}
-    else:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
+    try:
+        # Realizar la solicitud a la API de OpenAI
+        response = requests.post(OPENAI_API_URL, headers=headers, json=data)
+        response.raise_for_status()
+        result = response.json()
+        return {"response": result["choices"][0]["message"]["content"]}
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Error al consultar ChatGPT: {e}")
