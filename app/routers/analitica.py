@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import requests
 import json
-from google.auth import default
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 import os
@@ -25,7 +24,6 @@ async def search(query_request: QueryRequest):
                 scopes=["https://www.googleapis.com/auth/cloud-platform"]
             )
             
-        
         credentials.refresh(Request())
         access_token = credentials.token
     except Exception as e:
@@ -63,5 +61,55 @@ async def search(query_request: QueryRequest):
             return formatted_results
         else:
             raise HTTPException(status_code=404, detail="No results found.")
+    else:
+        raise HTTPException(status_code=response.status_code, detail=response.text)
+
+
+@search_router.post("/generate-response")
+async def generate_response(query_request: QueryRequest):
+    """Genera una respuesta usando Vertex AI Generative Models."""
+    try:
+        # Configurar credenciales
+        if os.getenv("ENV") == "production":
+            credentials, project_id = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        else:
+            credentials = service_account.Credentials.from_service_account_file(
+                SERVICE_ACCOUNT_FILE,
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+        
+        credentials.refresh(Request())
+        access_token = credentials.token
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to obtain access token: {e}")
+
+    # Configurar el endpoint de Vertex AI
+    VERTEX_API_URL = "https://us-central1-aiplatform.googleapis.com/v1/projects/345518488840/locations/us-central1/publishers/google/models/text-bison@001:predict"
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "instances": [
+            {
+                "content": query_request.query
+            }
+        ],
+        "parameters": {
+            "temperature": 0.7,
+            "maxOutputTokens": 256,
+            "topP": 0.8,
+            "topK": 40
+        }
+    }
+
+    # Realizar la solicitud a Vertex AI
+    response = requests.post(VERTEX_API_URL, headers=headers, json=payload)
+
+    if response.status_code == 200:
+        result = response.json()["predictions"]
+        return {"response": result[0]["content"]}
     else:
         raise HTTPException(status_code=response.status_code, detail=response.text)
