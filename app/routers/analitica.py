@@ -2,8 +2,10 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import requests
 import json
-from google.oauth2 import service_account
+from google.auth import default
 from google.auth.transport.requests import Request
+from google.oauth2 import service_account
+import os
 
 search_router = APIRouter()
 
@@ -11,13 +13,19 @@ class QueryRequest(BaseModel):
     query: str
 
 SERVICE_ACCOUNT_FILE = "service-account.json"
+
 @search_router.post("/search-issues")
 async def search(query_request: QueryRequest):
     try:
-        credentials = service_account.Credentials.from_service_account_file(
-            SERVICE_ACCOUNT_FILE,
-            scopes=["https://www.googleapis.com/auth/cloud-platform"]
-        )
+        if os.getenv("ENV") == "production":
+            credentials, project_id = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        else:
+            credentials = service_account.Credentials.from_service_account_file(
+                SERVICE_ACCOUNT_FILE,
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            
+        
         credentials.refresh(Request())
         access_token = credentials.token
     except Exception as e:
@@ -52,10 +60,8 @@ async def search(query_request: QueryRequest):
                 }
                 for res in top_results
             ]
-            
             return formatted_results
         else:
             raise HTTPException(status_code=404, detail="No results found.")
     else:
         raise HTTPException(status_code=response.status_code, detail=response.text)
-
