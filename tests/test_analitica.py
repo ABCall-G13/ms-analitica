@@ -111,3 +111,28 @@ def test_search_internal_server_error(mock_service_account, mock_request):
     response = client.post("/search-issues", json={"query": "sample query"})
     assert response.status_code == 500
     assert response.json() == {"detail": "Internal Server Error"}
+
+def test_chat_with_gpt_success(mock_request):
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "choices": [
+            {
+                "message": {
+                    "content": "This is a generated response."
+                }
+            }
+        ]
+    }
+    mock_request.return_value = mock_response
+    response = client.post("/generate-response", json={"query": "sample query"})
+    assert response.status_code == 200
+    assert response.json() == {"response": "This is a generated response."}
+
+def test_chat_with_gpt_invalid_query_field_type(mock_request):
+    response = client.post("/generate-response", json={"query": 12345})
+    assert response.status_code == 422  # Unprocessable Entity (FastAPI validation error)
+
+def test_chat_with_gpt_missing_query_field(mock_request):
+    response = client.post("/generate-response", json={})
+    assert response.status_code == 422  # Unprocessable Entity (FastAPI validation error)
